@@ -205,8 +205,8 @@ def execute(cmd):
         
 ######### Prepare the messages' vessel for the RGB values we will insert
 bufferlock = threading.Lock()
-stopped = False
 def stdin_to_buffer():
+    global stopped
     for line in fileinput.input():
         print(line)
         if stopped:
@@ -259,13 +259,17 @@ def averageimage():
     area = {}
 
 # Constantly sets RGB values by location via taking average of nearby pixels
+    global stopped
     while not stopped:
-        for x, bds in bounds.items():
-            #area[x] = rgbframe[bds[2]:bds[3], bds[0]:bds[1], :]
-            area[x] = rgbframe[bds[0]:bds[1], bds[2]:bds[3], :]
-            rgb[x] = cv2.mean(area[x])
-        for x, c in rgb.items():
-            rgb_bytes[x] = bytearray([int(c[0]/2), int(c[0]/2), int(c[1]/2), int(c[1]/2), int(c[2]/2), int(c[2]/2),] )
+        try:
+            for x, bds in bounds.items():
+                #area[x] = rgbframe[bds[2]:bds[3], bds[0]:bds[1], :]
+                area[x] = rgbframe[bds[0]:bds[1], bds[2]:bds[3], :]
+                rgb[x] = cv2.mean(area[x])
+            for x, c in rgb.items():
+                rgb_bytes[x] = bytearray([int(c[0]/2), int(c[0]/2), int(c[1]/2), int(c[1]/2), int(c[2]/2), int(c[2]/2),] )
+        except Exception as e:
+            sys.exit()
             
 
 ######################################################
@@ -287,13 +291,19 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
 ########## This section loops & pulls re-colored frames and alwyas get the newest frame 
     cap.set(cv2.CAP_PROP_BUFFERSIZE,0) # No frame buffer to avoid lagging, always grab newest frame
     ct = 0 ######ct code grabs every X frame as indicated below
+    global stopped
     while not stopped:
-        ct += 1
-        ret = cap.grab() #constantly grabs frames
-        if ct % 1 == 0: # Skip frames (1=don't skip,2=skip half,3=skip 2/3rds)
-            ret, bgrframe = cap.retrieve() #processes most recent frame
-            rgbframe = cv2.cvtColor(bgrframe, cv2.COLOR_BGR2RGB) #corrects BGR to RGB
-            if not ret: break
+        try:
+            ct += 1
+            ret = cap.grab() #constantly grabs frames
+            if ct % 1 == 0: # Skip frames (1=don't skip,2=skip half,3=skip 2/3rds)
+                ret, bgrframe = cap.retrieve() #processes most recent frame
+                rgbframe = cv2.cvtColor(bgrframe, cv2.COLOR_BGR2RGB) #corrects BGR to RGB
+                if not ret: break
+        except Exception as e:
+            print(e)
+            stopped=True
+            sys.exit()
 
 ######################################################
 ############## Sending the messages ##################
@@ -302,19 +312,27 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
 ######### This is where we define our message format and insert our light#s, RGB values, and X,Y,Brightness ##########
 def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
+    global stopped
     while not stopped:
-        bufferlock.acquire()
-        
-        message = bytes('HueStream','utf-8') + b'\1\0\0\0\0\0\0'
-        for i in rgb_bytes:
-            message += b'\0\0' + bytes(chr(int(i)), 'utf-8') + rgb_bytes[i]
+        try:
+            bufferlock.acquire()
+		
+            message = bytes('HueStream','utf-8') + b'\1\0\0\0\0\0\0'
+            for i in rgb_bytes:
+                message += b'\0\0' + bytes(chr(int(i)), 'utf-8') + rgb_bytes[i]
 
 
-        bufferlock.release()
-        proc.stdin.write(message.decode('utf-8','ignore'))
-        time.sleep(.01) #0.01 to 0.02 (slightly under 100 or 50 messages per sec // or (.015 = ~66.6))
-        proc.stdin.flush()
-        #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
+            bufferlock.release()
+            proc.stdin.write(message.decode('utf-8','ignore'))
+            time.sleep(.01) #0.01 to 0.02 (slightly under 100 or 50 messages per sec // or (.015 = ~66.6))
+            proc.stdin.flush()
+            #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
+
+        except Exception as e:
+            print(e)
+            stopped=True
+            sys.exit()
+
 
 ######################################################
 ############### Initialization Area ##################
@@ -323,6 +341,8 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
 ######### Section executes video input and establishes the connection stream to bridge ##########
 try:
     try:
+        global stopped
+        stopped=False
         threads = list()
         verbose("Starting cv2input...")
         t = threading.Thread(target=cv2input_to_buffer)
@@ -341,13 +361,14 @@ try:
         t.start()
         threads.append(t)
 
-        input("Press return to stop") # Allow us to exit easily
-        stopped=True
+        #input("Press return to stop") # Allow us to exit easily
+        #stopped=True
         for t in threads:
             t.join()
     except Exception as e:
         print(e)
         stopped=True
+        sys.exit()
 
 finally: #Turn off streaming to allow normal function immedietly
     verbose("Disabling streaming on Entertainment area")
