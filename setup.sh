@@ -11,4 +11,5 @@ echo "############### BASE DEPENDENCIES DONE - CHECK FOR ERRORS ###############"
 apt --yes install python3-opencv
 echo "############### OPENCV DONE - CHECK FOR ERRORS ###############" 
 echo "############### FULLY COMPLETE - CHECK FOR ERRORS ###############" 
+chmod +x harmonize.py
 exit

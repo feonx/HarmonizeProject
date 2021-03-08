@@ -13,6 +13,7 @@
 ########################################
 
 import sys
+import os
 from http_parser.parser import HttpParser
 import argparse
 import requests 
@@ -375,3 +376,4 @@ finally: #Turn off streaming to allow normal function immedietly
     r = requests.put(url = baseurl+"/{}/groups/{}".format(clientdata['username'],groupid),json={"stream":{"active":False}}) 
     jsondata = r.json()
     verbose(jsondata)
+    os.execv(sys.argv[0], sys.argv)
